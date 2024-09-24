@@ -10,6 +10,14 @@ repositories {
     mavenCentral()
 }
 
+kotlin {
+    jvmToolchain(8)
+}
+
+java {
+    withSourcesJar()
+}
+
 dependencies {
     testImplementation(kotlin("test"))
     implementation("com.formdev:flatlaf:3.5.1")
@@ -17,14 +25,18 @@ dependencies {
 
 }
 
-
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            groupId = project.group.toString()
+            artifactId = project.name
+            version = project.version.toString()
+            from(components["java"])
+        }
+    }
+}
 
 tasks.test {
     useJUnitPlatform()
-
     enabled = false
-}
-
-kotlin {
-    jvmToolchain(8)
 }
