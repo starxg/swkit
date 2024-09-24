@@ -43,6 +43,16 @@ class TabbedPane : Tabbed {
     var preselectBackgroundSensitivity = 3.5f
 
     /**
+     * 是否允许跨实例
+     */
+    var cross = true
+
+    /**
+     * 是否允许跨窗口，如果允许跨窗口那么 [cross] 也要为 true。
+     */
+    var crossWindows = true
+
+    /**
      * 定制化
      */
     var tabbedPaneCustomizer = object : JTabbedPaneCustomizer {
@@ -396,7 +406,6 @@ class TabbedPane : Tabbed {
         private var dragging = false
         private var drag: JWindow? = null
         private var preselectBackground: PreselectBackground? = null
-        private val owner get() = SwingUtilities.getWindowAncestor(splitterTabbedPane)
         private val focusManager = FocusManager.getCurrentKeyboardFocusManager()
 
         override fun mousePressed(e: MouseEvent) {
@@ -423,21 +432,15 @@ class TabbedPane : Tabbed {
                 it.isVisible = true
             }
 
-            var point = Point(e.locationOnScreen)
-            val root = if (owner is RootPaneContainer) (owner as RootPaneContainer).rootPane else owner
-            SwingUtilities.convertPointFromScreen(point, root)
-
-            val tabbedPane = findSplitterTabbedPane(
-                SwingUtilities.getDeepestComponentAt(root, point.x, point.y),
-                e.locationOnScreen
-            )
-            val background = this.preselectBackground
-            if (tabbedPane == null || background == null) {
-                background?.hide()
+            val tabbedPane = findSplitterTabbedPane(e.locationOnScreen)
+            if (tabbedPane == null) {
+                preselectBackground?.dispose()
                 return
             }
 
-            point = Point(e.locationOnScreen)
+            val background = initPreselectBackground(SwingUtilities.getWindowAncestor(tabbedPane))
+
+            val point = Point(e.locationOnScreen)
             SwingUtilities.convertPointFromScreen(point, tabbedPane)
             background.show(point, tabbedPane)
 
@@ -449,23 +452,36 @@ class TabbedPane : Tabbed {
 
         }
 
+        private fun initPreselectBackground(owner: Window): PreselectBackground {
+            val preselectBackground = this.preselectBackground
+            if (preselectBackground != null) {
+                if (preselectBackground.owner == owner) {
+                    return preselectBackground
+                }
+            }
+
+            this.preselectBackground?.dispose()
+            this.preselectBackground = PreselectBackground(
+                owner,
+                color = tabbedPane.preselectBackgroundColor,
+                opacity = tabbedPane.preselectBackgroundOpacity,
+                sensitivity = tabbedPane.preselectBackgroundSensitivity
+            )
+            return this.preselectBackground!!
+        }
+
         private fun initDrag(e: MouseEvent) {
             if (tabIndex == -1) return
 
             if (abs(pressedPoint.x - e.x) > 5 || abs(pressedPoint.y - e.y) > 5) {
-                val owner = JWindow(this.owner)
+                val owner = JWindow(SwingUtilities.getWindowAncestor(tabbedPane.root))
                 val image = createTabImage(tabIndex)
                 owner.add(JLabel(ImageIcon(image)))
                 owner.size = Dimension(image.width, image.height)
                 owner.isVisible = false
                 this.drag = owner
 
-                this.preselectBackground = PreselectBackground(
-                    this.owner,
-                    color = tabbedPane.preselectBackgroundColor,
-                    opacity = tabbedPane.preselectBackgroundOpacity,
-                    sensitivity = tabbedPane.preselectBackgroundSensitivity
-                )
+                // 拖拽中
                 dragging = true
 
                 // 获取到 Tab
@@ -474,9 +490,50 @@ class TabbedPane : Tabbed {
                 // 从原来的地方删除
                 splitterTabbedPane.removeTabAt(tabIndex, false)
 
+                // 监听 ESC
                 focusManager.addKeyEventDispatcher(this)
 
             }
+        }
+
+        private fun findSplitterTabbedPane(screenPoint: Point): SplitterTabbedPane? {
+            val current = SwingUtilities.getWindowAncestor(tabbedPane.root)
+            for (window in Window.getWindows()
+                // 如果不允许跨窗口那么就是只有 current
+                .filter { if (tabbedPane.crossWindows) true else it == current }
+                .sortedBy { if (it == current) 0 else 1 }) {
+
+                val point = Point(screenPoint)
+                SwingUtilities.convertPointFromScreen(point, window)
+
+                val root = if (window is RootPaneContainer) (window as RootPaneContainer).rootPane else window
+                // 先根据坐标查找到最深的子
+                val c = SwingUtilities.getDeepestComponentAt(root, point.x, point.y)
+                // 然后再一层层找出合适的Pane
+                val p = findSplitterTabbedPane(c, screenPoint)
+
+                // 如果不在当前root内，那就是跨实例了
+                if (!tabbedPane.cross && !isInCurrentRoot(p)) {
+                    // 跳过
+                    continue
+                }
+
+                if (p != null) {
+                    return p
+                }
+            }
+            return null
+        }
+
+        private fun isInCurrentRoot(c: Component?): Boolean {
+            var p = c
+            while (p != null) {
+                if (p == tabbedPane.root) {
+                    return true
+                }
+                p = p.parent
+            }
+            return false
         }
 
         private fun findSplitterTabbedPane(c: Component?, screenPoint: Point): SplitterTabbedPane? {
@@ -631,12 +688,12 @@ internal open class DynamicSingleSplitPane : JSplitPane() {
 
 
 internal class PreselectBackground(
-    owner: Window,
+    val owner: Window,
     opacity: Float = 0.8f,
     color: Color = Color(0, 91, 187, 40),
     private val sensitivity: Float = 3.5f,
 ) {
-    private val window = JWindow(SwingUtilities.getWindowAncestor(owner)).apply {
+    private val window = JWindow(owner).apply {
         this.isVisible = false
         this.background = color
         this.opacity = opacity
