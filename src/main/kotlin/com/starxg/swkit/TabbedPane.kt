@@ -9,6 +9,7 @@ import java.awt.image.BufferedImage
 import javax.swing.*
 import javax.swing.event.EventListenerList
 import kotlin.math.abs
+import kotlin.random.Random
 
 internal enum class Position {
     TOP,
@@ -16,6 +17,7 @@ internal enum class Position {
     LEFT,
     RIGHT,
     MIDDLE,
+    HEADER,
     UNKNOWN
 }
 
@@ -24,8 +26,7 @@ interface JTabbedPaneCustomizer {
     fun customize(tabbedPane: JTabbedPane)
 }
 
-
-class TabbedPane : Tabbed {
+class TabbedPane : JPanel(), Tabbed {
 
     /**
      * 预选颜色
@@ -61,12 +62,16 @@ class TabbedPane : Tabbed {
         }
     }
 
+    var debug = false
+
 
     private val listeners = EventListenerList()
     private val tabbedListeners get() = listeners.getListeners(TabbedListener::class.java)
     private val tabs = mutableListOf<Tab>()
     private val rootSplitter = Splitter()
-    private val root = JPanel(BorderLayout()).apply {
+
+    init {
+        layout = BorderLayout()
         add(rootSplitter, BorderLayout.CENTER)
     }
 
@@ -80,7 +85,7 @@ class TabbedPane : Tabbed {
     }
 
     internal fun addTab(splitterTabbedPane: SplitterTabbedPane, tab: Tab) {
-        splitterTabbedPane.addTab(tab.getTitle(), tab.getJComponent())
+        splitterTabbedPane.addTab(tab.getTitle(), tab.getIcon(), tab.getJComponent())
         this.tabs.add(tab)
     }
 
@@ -88,9 +93,6 @@ class TabbedPane : Tabbed {
         tabs.remove(tab)
     }
 
-    override fun getJComponent(): JComponent {
-        return root
-    }
 
     override fun getTabs(): List<Tab> {
         return tabs
@@ -342,10 +344,26 @@ class TabbedPane : Tabbed {
                 if (p == null) throw IllegalStateException()
                 return p as Splitter
             }
+        internal val tabbed: TabbedPane
+            get() {
+                var p = parent
+                while (p != null && p !is TabbedPane) {
+                    p = p.parent
+                }
+                if (p == null) throw IllegalStateException()
+                return p as TabbedPane
+            }
 
+        private val debugColor by lazy {
+            Color(
+                Random.nextInt(200, 256),
+                Random.nextInt(200, 256),
+                Random.nextInt(200, 256)
+            )
+        }
 
         init {
-            val drag = Drag(this, this@TabbedPane)
+            val drag = Drag(this)
             addMouseListener(drag)
             addMouseMotionListener(drag)
             putClientProperty("JTabbedPane.tabClosable", true)
@@ -371,6 +389,15 @@ class TabbedPane : Tabbed {
         }
 
 
+        override fun paintComponent(g: Graphics) {
+            super.paintComponent(g)
+
+            if (debug) {
+                g.color = debugColor
+                g.fillRect(0, tabHeight, width, height)
+            }
+        }
+
         override fun removeTabAt(index: Int) {
             removeTabAt(index, true)
         }
@@ -390,7 +417,7 @@ class TabbedPane : Tabbed {
                     return tab
                 }
             }
-            throw IndexOutOfBoundsException()
+            throw IndexOutOfBoundsException("index $index")
         }
 
     }
@@ -398,7 +425,7 @@ class TabbedPane : Tabbed {
     /**
      * 拖拽功能
      */
-    internal class Drag(private val splitterTabbedPane: SplitterTabbedPane, private val tabbedPane: TabbedPane) :
+    internal class Drag(private val splitterTabbedPane: SplitterTabbedPane) :
         MouseAdapter(), KeyEventDispatcher {
         private var tabIndex = -1
         private var tab: Tab? = null
@@ -407,6 +434,7 @@ class TabbedPane : Tabbed {
         private var drag: JWindow? = null
         private var preselectBackground: PreselectBackground? = null
         private val focusManager = FocusManager.getCurrentKeyboardFocusManager()
+        private val tabbedPane get() = splitterTabbedPane.tabbed
 
         override fun mousePressed(e: MouseEvent) {
             tabIndex = splitterTabbedPane.indexAtLocation(e.x, e.y)
@@ -438,15 +466,13 @@ class TabbedPane : Tabbed {
                 return
             }
 
+            // 获取预选框
             val background = initPreselectBackground(SwingUtilities.getWindowAncestor(tabbedPane))
 
             val point = Point(e.locationOnScreen)
             SwingUtilities.convertPointFromScreen(point, tabbedPane)
             background.show(point, tabbedPane)
-
-            if (!background.isVisible()) {
-                background.setVisible(true)
-            }
+            background.setVisible(background.position != Position.UNKNOWN)
 
             drag?.isVisible = true
 
@@ -474,7 +500,7 @@ class TabbedPane : Tabbed {
             if (tabIndex == -1) return
 
             if (abs(pressedPoint.x - e.x) > 5 || abs(pressedPoint.y - e.y) > 5) {
-                val owner = JWindow(SwingUtilities.getWindowAncestor(tabbedPane.root))
+                val owner = JWindow(SwingUtilities.getWindowAncestor(tabbedPane))
                 val image = createTabImage(tabIndex)
                 owner.add(JLabel(ImageIcon(image)))
                 owner.size = Dimension(image.width, image.height)
@@ -497,7 +523,7 @@ class TabbedPane : Tabbed {
         }
 
         private fun findSplitterTabbedPane(screenPoint: Point): SplitterTabbedPane? {
-            val current = SwingUtilities.getWindowAncestor(tabbedPane.root)
+            val current = SwingUtilities.getWindowAncestor(tabbedPane)
             for (window in Window.getWindows()
                 // 如果不允许跨窗口那么就是只有 current
                 .filter { if (tabbedPane.crossWindows) true else it == current }
@@ -528,7 +554,7 @@ class TabbedPane : Tabbed {
         private fun isInCurrentRoot(c: Component?): Boolean {
             var p = c
             while (p != null) {
-                if (p == tabbedPane.root) {
+                if (p == tabbedPane) {
                     return true
                 }
                 p = p.parent
@@ -543,7 +569,7 @@ class TabbedPane : Tabbed {
                 if (p is SplitterTabbedPane) {
                     val point = Point(screenPoint)
                     SwingUtilities.convertPointFromScreen(point, p)
-                    if ((point.x >= 0) && (point.x < p.width) && (point.y >= p.tabHeight) && (point.y < p.height)) {
+                    if (p.contains(point)) {
                         return p
                     }
                 }
@@ -613,11 +639,12 @@ class TabbedPane : Tabbed {
 
             // 这种就是最后一个拖拽出来，然后右添加回去了
             if (targetTabbedPane == splitterTabbedPane && targetTabbedPane.tabCount == 0) {
-                tabbedPane.addTab(splitterTabbedPane, tab)
+                targetTabbedPane.tabbed.addTab(splitterTabbedPane, tab)
             } else {
                 // 中间就是直接添加
-                if (position == Position.MIDDLE) {
-                    tabbedPane.addTab(targetTabbedPane, tab)
+                if (position == Position.MIDDLE || position == Position.HEADER) {
+                    targetTabbedPane.tabbed.addTab(targetTabbedPane, tab)
+                    targetTabbedPane.selectedIndex = targetTabbedPane.tabCount - 1
                 } else {
                     targetTabbedPane.splitter.split(position, tab)
                 }
@@ -765,6 +792,13 @@ internal class PreselectBackground(
                 rectangle.y = locationOnScreen.y + tabHeight
             }
 
+            Position.HEADER -> {
+                rectangle.width = tabbedPane.width
+                rectangle.height = tabHeight
+                rectangle.x = tabbedPane.locationOnScreen.x
+                rectangle.y = tabbedPane.locationOnScreen.y
+            }
+
             else -> rectangle
         }
         return rectangle
@@ -775,6 +809,11 @@ internal class PreselectBackground(
         // 如果已经没有 Tab 了，那就只能添加到中间
         if (tabbedPane.tabCount < 1) {
             return Position.MIDDLE
+        }
+
+        // 在 Header
+        if (point.y < tabbedPane.tabHeight) {
+            return Position.HEADER
         }
 
         val proportion = sensitivity

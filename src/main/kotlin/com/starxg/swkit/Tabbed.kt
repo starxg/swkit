@@ -27,7 +27,6 @@ interface TabbedListener : EventListener {
 interface Tabbed {
     fun addTab(tab: Tab)
     fun removeTab(tab: Tab)
-    fun getJComponent(): JComponent
     fun getTabs(): List<Tab>
 
     fun addListener(listener: TabbedListener)
