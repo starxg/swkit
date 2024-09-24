@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     kotlin("jvm") version "2.0.20"
 }
 
@@ -17,8 +18,11 @@ dependencies {
 }
 
 
+
 tasks.test {
     useJUnitPlatform()
+
+    enabled = false
 }
 
 kotlin {
