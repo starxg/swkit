@@ -21,6 +21,13 @@ internal enum class Position {
     UNKNOWN
 }
 
+private fun getDefaultDividerSize(): Int {
+    return try {
+        UIManager.getInt("SplitPane.dividerSize")
+    } catch (e: Exception) {
+        4
+    }
+}
 
 interface JTabbedPaneCustomizer {
     fun customize(tabbedPane: JTabbedPane)
@@ -276,7 +283,7 @@ class TabbedPane : JPanel(), Tabbed {
             }
 
             this.setResizeWeight(0.5)
-            this.setDividerSize(4)
+            this.setDividerSize(getDefaultDividerSize())
             this.doLayout()
         }
 
@@ -312,7 +319,7 @@ class TabbedPane : JPanel(), Tabbed {
             }
 
             this.setResizeWeight(0.5)
-            this.setDividerSize(4)
+            this.setDividerSize(getDefaultDividerSize())
         }
 
         internal fun split(position: Position, tab: Tab) {
@@ -704,13 +711,7 @@ internal open class DynamicSingleSplitPane : JSplitPane() {
         }
     }
 
-    private fun getDefaultDividerSize(): Int {
-        return try {
-            UIManager.getInt("SplitPane.dividerSize")
-        } catch (e: Exception) {
-            4
-        }
-    }
+
 }
 
 
