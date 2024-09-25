@@ -386,7 +386,11 @@ class TabbedPane : JPanel(), Tabbed {
         init {
             addChangeListener {
                 listeners.getListeners(TabbedListener::class.java).forEach {
-                    it.onTabSelected(getTabAt(selectedIndex))
+                    val tab = getTabAt(selectedIndex)
+                    it.onTabSelected(tab)
+                    SwingUtilities.invokeLater {
+                        tab.getJComponent().requestFocus()
+                    }
                 }
             }
         }
