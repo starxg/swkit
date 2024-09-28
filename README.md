@@ -9,6 +9,10 @@
 
 <img src="./screenshots/TabbedPane.jpg" width="500" alt="TabbedPane">
 
+### FilterTreeTextField
+
+<img src="./screenshots/FilterTreeTextField.png" width="500" alt="TabbedPane">
+
 ## Licensing
 
 本项目采用双许可协议：
