@@ -1,6 +1,8 @@
 package com.starxg.swkit
 
 import com.formdev.flatlaf.extras.components.FlatTextField
+import java.util.*
+import java.util.function.BiPredicate
 import javax.swing.JTree
 import javax.swing.event.*
 import javax.swing.tree.DefaultMutableTreeNode
@@ -8,15 +10,56 @@ import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreeModel
 import javax.swing.tree.TreePath
 
+interface FilterListener : EventListener {
+    fun onSearch(text: String)
+}
+
 class FilterTreeTextField : FlatTextField {
     private val filterableTreeModel = FilterableTreeModel()
     private val model: TreeModel
     private val state = object {
         var expansionState = ""
         var selectionPaths = arrayOf<TreePath>()
+        var filterText = ""
     }
 
+    var filtering = false
     var tree: JTree? = null
+    var ignoreCase = false
+
+    private val filters = mutableListOf<BiPredicate<Any, String>>(object : BiPredicate<Any, String> {
+        override fun test(child: Any, text: String): Boolean {
+            if (child.toString().contains(text, ignoreCase)) {
+                return true
+            } else if (child is DefaultMutableTreeNode && child.userObject != null) {
+                if (child.userObject.toString().contains(text, ignoreCase)) {
+                    return true
+                }
+            }
+            return false
+        }
+
+
+    })
+
+    private val filterListener = object : TreeModelListener {
+        override fun treeNodesChanged(e: TreeModelEvent) {
+            treeStructureChanged(e)
+        }
+
+        override fun treeNodesInserted(e: TreeModelEvent) {
+            treeStructureChanged(e)
+        }
+
+        override fun treeNodesRemoved(e: TreeModelEvent) {
+            treeStructureChanged(e)
+        }
+
+        override fun treeStructureChanged(e: TreeModelEvent) {
+            filter(state.filterText)
+        }
+
+    }
 
     init {
         this.document.addDocumentListener(object : DocumentListener {
@@ -36,24 +79,40 @@ class FilterTreeTextField : FlatTextField {
 
     constructor() {
         this.model = getDefaultTreeModel()
+        this.model.addTreeModelListener(filterListener)
     }
 
     constructor(model: TreeModel) {
         this.model = model
+        this.model.addTreeModelListener(filterListener)
+    }
+
+    fun addFilterListener(listener: FilterListener) {
+        listenerList.add(FilterListener::class.java, listener)
+    }
+
+    fun removeFilterListener(listener: FilterListener) {
+        listenerList.remove(FilterListener::class.java, listener)
     }
 
     fun filter(text: String) {
+
+        // 搜索事件
+        listenerList.getListeners(FilterListener::class.java).forEach { it.onSearch(text) }
+
+        state.filterText = text
         filterableTreeModel.children.clear()
 
+
         // 记录状态
-        if (!filterableTreeModel.filtering) {
+        if (!filtering) {
             tree?.let {
                 state.expansionState = TreeUtils.saveExpansionState(it)
                 state.selectionPaths = it.selectionPaths ?: emptyArray()
             }
         }
 
-        filterableTreeModel.filtering = false
+        filtering = false
 
         // 当取消搜索的时候恢复状态
         if (text.isBlank()) {
@@ -65,7 +124,7 @@ class FilterTreeTextField : FlatTextField {
             return
         }
 
-        filterableTreeModel.filtering = true
+        filtering = true
 
         // 过滤
         val children = filterChildren(model.root, filterableTreeModel.children)
@@ -77,10 +136,27 @@ class FilterTreeTextField : FlatTextField {
         // fire
         filterableTreeModel.fireTreeStructureChanged()
 
+
         // expand all
         tree?.let {
             TreeUtils.expandAll(it)
         }
+    }
+
+    fun filter() {
+        filter(state.filterText)
+    }
+
+    fun addFilter(predicate: BiPredicate<Any, String>) {
+        filters.add(predicate)
+    }
+
+    fun removeFilter(predicate: BiPredicate<Any, String>) {
+        filters.remove(predicate)
+    }
+
+    fun clearFilters() {
+        filters.clear()
     }
 
     private fun filterChildren(node: Any, treeChildren: MutableMap<Any, MutableList<Any>>): MutableList<Any> {
@@ -88,11 +164,10 @@ class FilterTreeTextField : FlatTextField {
         for (i in 0 until model.getChildCount(node)) {
             val child = model.getChild(node, i)
             if (model.isLeaf(child)) {
-                if (child.toString().contains(text)) {
-                    children.add(child)
-                } else if (child is DefaultMutableTreeNode && child.userObject != null) {
-                    if (child.userObject.toString().contains(text)) {
+                for (filter in filters) {
+                    if (filter.test(child, state.filterText)) {
                         children.add(child)
+                        break
                     }
                 }
             } else {
@@ -139,7 +214,6 @@ class FilterTreeTextField : FlatTextField {
 
     private inner class FilterableTreeModel : TreeModel {
         val children = linkedMapOf<Any, MutableList<Any>>()
-        var filtering = false
         private val listeners = EventListenerList()
 
         override fun getRoot(): Any {
@@ -159,6 +233,7 @@ class FilterTreeTextField : FlatTextField {
         }
 
         override fun valueForPathChanged(path: TreePath, newValue: Any) {
+            model.valueForPathChanged(path, newValue)
         }
 
         override fun getIndexOfChild(parent: Any, child: Any): Int {
