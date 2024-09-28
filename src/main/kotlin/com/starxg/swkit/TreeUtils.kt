@@ -1,26 +1,28 @@
 package com.starxg.swkit
 
 import javax.swing.JTree
-import javax.swing.tree.TreeNode
+import javax.swing.tree.TreeModel
 
 object TreeUtils {
     /**
      * 获取子节点
      */
     fun children(
-        parent: TreeNode,
+        model: TreeModel,
+        parent: Any,
         including: Boolean = true
-    ): List<TreeNode> {
+    ): List<Any> {
 
-        val nodes = mutableListOf<TreeNode>()
+        val nodes = mutableListOf<Any>()
         val parents = mutableListOf(parent)
 
         while (parents.isNotEmpty()) {
             val p = parents.removeFirst()
-            p.children().toList().onEach {
-                nodes.add(it)
+            for (i in 0 until model.getChildCount(p)) {
+                val child = model.getChild(p, i) ?: continue
+                nodes.add(child)
                 if (including) {
-                    parents.add(it)
+                    parents.add(child)
                 }
             }
         }
