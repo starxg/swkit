@@ -7,7 +7,6 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.image.BufferedImage
 import javax.swing.*
-import javax.swing.event.EventListenerList
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -33,7 +32,14 @@ interface JTabbedPaneCustomizer {
     fun customize(tabbedPane: JTabbedPane)
 }
 
-class TabbedPane : JPanel(), Tabbed {
+class TabbedPane(
+    // 定制化
+    val tabbedPaneCustomizer: JTabbedPaneCustomizer = object : JTabbedPaneCustomizer {
+        override fun customize(tabbedPane: JTabbedPane) {
+            tabbedPane.tabLayoutPolicy = JTabbedPane.SCROLL_TAB_LAYOUT
+        }
+    }
+) : JPanel(), Tabbed {
 
     /**
      * 预选颜色
@@ -60,20 +66,8 @@ class TabbedPane : JPanel(), Tabbed {
      */
     var crossWindows = true
 
-    /**
-     * 定制化
-     */
-    var tabbedPaneCustomizer = object : JTabbedPaneCustomizer {
-        override fun customize(tabbedPane: JTabbedPane) {
-            tabbedPane.tabLayoutPolicy = JTabbedPane.SCROLL_TAB_LAYOUT
-        }
-    }
 
     var debug = false
-
-
-    private val listeners = EventListenerList()
-    private val tabbedListeners get() = listeners.getListeners(TabbedListener::class.java)
     private val tabs = mutableListOf<Tab>()
     private val rootSplitter = Splitter()
 
@@ -92,25 +86,37 @@ class TabbedPane : JPanel(), Tabbed {
     }
 
     internal fun addTab(splitterTabbedPane: SplitterTabbedPane, tab: Tab) {
-        splitterTabbedPane.addTab(tab.getTitle(), tab.getIcon(), tab.getJComponent())
         this.tabs.add(tab)
+        splitterTabbedPane.addTab(tab.getTitle(), tab.getIcon(), tab.getJComponent())
+        splitterTabbedPane.selectedIndex = splitterTabbedPane.tabCount - 1
     }
 
     override fun removeTab(tab: Tab) {
+        val splitterTabbedPane = getSplitterTabbedPaneByTab(tab) ?: return
+        splitterTabbedPane.removeTab(tab)
         tabs.remove(tab)
+    }
+
+    private fun getSplitterTabbedPaneByTab(tab: Tab): SplitterTabbedPane? {
+        val queue = mutableListOf<JComponent>()
+        queue.add(rootSplitter)
+        while (queue.isNotEmpty()) {
+            val c = queue.removeLast()
+            for (e in c.components) {
+                if (e is JComponent) {
+                    queue.add(e)
+                }
+                if (e == tab.getJComponent()) {
+                    return e.parent as SplitterTabbedPane
+                }
+            }
+        }
+        return null
     }
 
 
     override fun getTabs(): List<Tab> {
         return tabs
-    }
-
-    override fun addListener(listener: TabbedListener) {
-        listeners.add(TabbedListener::class.java, listener)
-    }
-
-    override fun removeListener(listener: TabbedListener) {
-        listeners.remove(TabbedListener::class.java, listener)
     }
 
 
@@ -378,17 +384,14 @@ class TabbedPane : JPanel(), Tabbed {
                 // 提前获取
                 val tab = getTabAt(u)
                 removeTabAt(u)
-                // 发出被删除事件
-                tabbedListeners.forEach { it.onTabRemoved(tab, false) }
+                tab.onTabRemoved(true)
             }
         }
 
         init {
             addChangeListener {
-                listeners.getListeners(TabbedListener::class.java).forEach {
-                    val tab = getTabAt(selectedIndex)
-                    it.onTabSelected(tab)
-                }
+                if (selectedIndex > -1)
+                    getTabAt(selectedIndex).onTabSelected()
             }
         }
 
@@ -408,6 +411,14 @@ class TabbedPane : JPanel(), Tabbed {
 
         override fun removeTabAt(index: Int) {
             removeTabAt(index, true)
+        }
+
+        fun removeTab(tab: Tab) {
+            for (i in 0 until tabCount) {
+                if (getComponentAt(i) == tab) {
+                    removeTabAt(i)
+                }
+            }
         }
 
 
@@ -632,14 +643,11 @@ class TabbedPane : JPanel(), Tabbed {
             }
 
             if (position == Position.UNKNOWN || targetTabbedPane !is SplitterTabbedPane) {
-                // 发出被删除事件
-                tabbedPane.tabbedListeners.forEach { it.onTabRemoved(tab, false) }
-
                 if (position == Position.UNKNOWN) {
                     if (splitterTabbedPane.tabCount == 0) {
                         splitterTabbedPane.splitter.tabbedPaneEmpty()
                         // 外部释放
-                        tabbedPane.tabbedListeners.forEach { it.onOutSideReleased(tab) }
+                        tab.onOutSideReleased()
                     }
                 }
                 return

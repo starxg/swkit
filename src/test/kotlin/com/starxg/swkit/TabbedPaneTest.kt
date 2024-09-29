@@ -3,7 +3,6 @@ package com.starxg.swkit
 import com.formdev.flatlaf.FlatIntelliJLaf
 import com.formdev.flatlaf.FlatLaf
 import java.awt.BorderLayout
-import java.awt.Color
 import javax.swing.*
 import kotlin.random.Random
 import kotlin.test.Test
@@ -15,18 +14,14 @@ class TabbedPaneTest {
     fun test() {
         FlatLaf.setup(FlatIntelliJLaf())
 
-        UIManager.put("SplitPaneDivider.gripDotCount", 0)
-        UIManager.put("SplitPane.continuousLayout", true)
-        UIManager.put("SplitPane.dividerSize", 1)
-        UIManager.put("SplitPaneDivider.style", "plain")
         UIManager.put(
             "SplitPaneDivider.border",
-            BorderFactory.createMatteBorder(0, 0, 0, 1, UIManager.getColor("Component.borderColor"))
+            BorderFactory.createMatteBorder(1, 1, 1, 1, UIManager.getColor("Component.borderColor"))
         )
 
 
         SwingUtilities.invokeLater {
-            var pane = TabbedPane()
+            val pane = TabbedPane()
 
             val frame = JFrame()
             println(frame.graphicsConfiguration.defaultTransform.scaleX)
