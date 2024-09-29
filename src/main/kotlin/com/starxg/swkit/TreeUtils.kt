@@ -41,7 +41,7 @@ object TreeUtils {
     }
 
     fun loadExpansionState(tree: JTree, state: String) {
-        if (state.isEmpty()) {
+        if (state.isBlank()) {
             return
         }
 

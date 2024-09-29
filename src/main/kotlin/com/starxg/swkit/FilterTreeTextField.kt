@@ -44,19 +44,27 @@ class FilterTreeTextField : FlatTextField {
 
     private val filterListener = object : TreeModelListener {
         override fun treeNodesChanged(e: TreeModelEvent) {
-            treeStructureChanged(e)
+            filterableTreeModel.listeners.getListeners(TreeModelListener::class.java).forEach {
+                it.treeNodesChanged(e)
+            }
         }
 
         override fun treeNodesInserted(e: TreeModelEvent) {
-            treeStructureChanged(e)
+            filterableTreeModel.listeners.getListeners(TreeModelListener::class.java).forEach {
+                it.treeNodesInserted(e)
+            }
         }
 
         override fun treeNodesRemoved(e: TreeModelEvent) {
-            treeStructureChanged(e)
+            filterableTreeModel.listeners.getListeners(TreeModelListener::class.java).forEach {
+                it.treeNodesRemoved(e)
+            }
         }
 
         override fun treeStructureChanged(e: TreeModelEvent) {
-            filter(state.filterText)
+            filterableTreeModel.listeners.getListeners(TreeModelListener::class.java).forEach {
+                it.treeStructureChanged(e)
+            }
         }
 
     }
@@ -214,7 +222,7 @@ class FilterTreeTextField : FlatTextField {
 
     private inner class FilterableTreeModel : TreeModel {
         val children = linkedMapOf<Any, MutableList<Any>>()
-        private val listeners = EventListenerList()
+        val listeners = EventListenerList()
 
         override fun getRoot(): Any {
             return model.root
@@ -260,6 +268,5 @@ class FilterTreeTextField : FlatTextField {
                 )
             }
         }
-
     }
 }
