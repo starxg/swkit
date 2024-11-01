@@ -97,6 +97,17 @@ class TabbedPane(
         tabs.remove(tab)
     }
 
+    fun getCurrentJTabbedPane(): JTabbedPane? {
+        var p = FocusManager.getCurrentKeyboardFocusManager().focusOwner as JComponent?
+        while (p != null) {
+            if (p is SplitterTabbedPane) {
+                return p
+            }
+            p = p.parent as JComponent?
+        }
+        return null
+    }
+
     private fun getSplitterTabbedPaneByTab(tab: Tab): SplitterTabbedPane? {
         val queue = mutableListOf<JComponent>()
         queue.add(rootSplitter)
@@ -393,9 +404,19 @@ class TabbedPane(
                 if (selectedIndex > -1)
                     getTabAt(selectedIndex).onTabSelected()
             }
+
+
         }
 
         init {
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent) {
+                    val tabIndex = indexAtLocation(e.x, e.y)
+                    if (tabIndex == -1) return
+                    getComponentAt(tabIndex).requestFocusInWindow()
+                }
+            })
+
             tabbedPaneCustomizer.customize(this)
         }
 
